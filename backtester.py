@@ -339,7 +339,7 @@ def run_backtest(
                 if line.name in used_lines:
                     continue  # Re-entry must be on different line
 
-                rejection = detect_rejection(candle, line.price)
+                rejection = detect_rejection(candle, line.price, line.direction)
                 if rejection is None:
                     continue
 
