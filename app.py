@@ -45,15 +45,21 @@ from line_calculator import (
 from signal_engine import (
     scan_for_signals, compute_session_quality, get_vix_regime,
 )
-from ui_components import (
-    render_hero, render_lines_panel, render_pivot_panel,
-    render_signal_panel, render_session_quality,
-    render_confluence_zones, render_chart, render_trade_journal,
-    render_9am_levels, render_live_levels,
-    render_daily_pnl_card, render_nearest_levels,
-    render_event_countdown, render_trade_readiness,
-    render_scenario_card, render_trade_card, render_ladder,
-)
+try:
+    from ui_components import (
+        render_hero, render_lines_panel, render_pivot_panel,
+        render_signal_panel, render_session_quality,
+        render_confluence_zones, render_chart, render_trade_journal,
+        render_9am_levels, render_live_levels,
+        render_daily_pnl_card, render_nearest_levels,
+        render_event_countdown, render_trade_readiness,
+        render_scenario_card, render_trade_card, render_ladder,
+    )
+except Exception as _ui_err:
+    import traceback as _tb
+    st.error(f"**ui_components import failed:** {_ui_err}")
+    st.code(_tb.format_exc())
+    st.stop()
 from macro_calendar import (
     get_events_for_date, get_upcoming_events,
     get_event_summary_for_week, get_worst_severity_today,
