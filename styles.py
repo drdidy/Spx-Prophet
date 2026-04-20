@@ -9,6 +9,7 @@ from config import COLORS
 MAIN_CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Outfit:wght@200;300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
 
 :root {{
     --bg-page: #020209;
@@ -512,10 +513,17 @@ li[role="option"][aria-selected="true"] {{ background: rgba(0,212,255,0.12) !imp
     background: linear-gradient(145deg, #0c0c1f, #08081a) !important;
 }}
 [data-testid="stExpander"] summary {{
-    font-size: 0.8rem !important;
-    letter-spacing: 1px !important; color: var(--text3) !important;
+    font-size: 0.8rem !important; color: var(--text3) !important;
 }}
 [data-testid="stExpander"] summary:hover {{ color: var(--accent) !important; }}
+/* Restore Material Symbols font on icon spans inside expander summary */
+[data-testid="stExpander"] summary span[style*="material"],
+[data-testid="stExpander"] summary [class*="material"],
+[data-testid="stExpander"] summary > div > span:first-child,
+[data-testid="stExpander"] summary > span:first-child {{
+    font-family: 'Material Symbols Rounded' !important;
+    font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24 !important;
+}}
 
 /* Alerts */
 .stAlert {{
