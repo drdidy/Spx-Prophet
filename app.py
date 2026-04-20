@@ -85,6 +85,34 @@ CT = pytz.timezone(TIMEZONE)
 st.markdown(MAIN_CSS, unsafe_allow_html=True)
 st.markdown('<div class="grid-bg"></div>', unsafe_allow_html=True)
 
+# ─── Fix Streamlit expander icon glyphs (React re-render safe) ───────
+st.markdown("""
+<script>
+(function() {
+    function fixExpanders() {
+        document.querySelectorAll('[data-testid="stExpander"] summary').forEach(function(summary) {
+            summary.querySelectorAll('span, div').forEach(function(el) {
+                var t = el.childNodes.length === 1 && el.childNodes[0].nodeType === 3
+                    ? el.childNodes[0].textContent.trim() : '';
+                if (t === 'arrow_right' || t === '_arrow_right' ||
+                    t === 'expand_more' || t === 'chevron_right' ||
+                    t === 'double_arrow_right' || t === 'keyboard_arrow_right') {
+                    el.style.setProperty('font-family', "'Material Symbols Rounded'", 'important');
+                    el.style.setProperty('font-variation-settings',
+                        "'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24", 'important');
+                }
+            });
+        });
+    }
+    var obs = new MutationObserver(fixExpanders);
+    obs.observe(document.documentElement, { childList: true, subtree: true });
+    fixExpanders();
+    setTimeout(fixExpanders, 200);
+    setTimeout(fixExpanders, 800);
+})();
+</script>
+""", unsafe_allow_html=True)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  SIDEBAR — Manual Overrides & Controls
