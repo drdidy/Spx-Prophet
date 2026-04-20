@@ -512,12 +512,8 @@ li[role="option"][aria-selected="true"] {{ background: rgba(0,212,255,0.12) !imp
     background: linear-gradient(145deg, #0c0c1f, #08081a) !important;
 }}
 [data-testid="stExpander"] summary {{
-    font-family: 'Material Symbols Rounded', 'Material Icons', 'Orbitron', sans-serif !important;
-    font-size: 0.65rem !important;
-    letter-spacing: 2px !important; color: var(--text3) !important;
-}}
-[data-testid="stExpander"] summary span:last-child {{
-    font-family: 'Orbitron', sans-serif !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 1px !important; color: var(--text3) !important;
 }}
 [data-testid="stExpander"] summary:hover {{ color: var(--accent) !important; }}
 
