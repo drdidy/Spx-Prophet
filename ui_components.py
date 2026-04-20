@@ -1040,3 +1040,265 @@ def render_trade_readiness(
         f'</div>'
     )
     st.markdown(html, unsafe_allow_html=True)
+
+
+# ─── Phase 1 Simplified UI: Scenario · Trade · Ladder ────────────────
+
+_LINE_SHORT_MAP = {
+    "asc_ceiling": "AC", "asc_floor": "AF",
+    "desc_ceiling": "DC", "desc_floor": "DF",
+    "hw_ascending": "HW", "lw_descending": "LW",
+}
+
+
+def render_scenario_card(
+    session_quality,
+    latest_signal,
+    vix: float,
+    pivots_confirmed: int,
+    macro_blackout: bool,
+    today_severity: str,
+):
+    """Dominant single-glance card: grade + recommendation + current scenario."""
+    from signal_engine import get_vix_regime
+    vix_regime, vix_color = get_vix_regime(vix)
+
+    if macro_blackout:
+        scenario = "MACRO HOLD"
+        scenario_color = RED
+        scenario_icon = "⛔"
+    elif session_quality.recommendation == "SIT OUT":
+        scenario = "SIT OUT"
+        scenario_color = RED
+        scenario_icon = "🚫"
+    elif session_quality.recommendation == "PAPER ONLY":
+        scenario = "OBSERVE ONLY"
+        scenario_color = GOLD
+        scenario_icon = "👁"
+    elif latest_signal and latest_signal.direction == "LONG":
+        ls = _LINE_SHORT_MAP.get(latest_signal.entry_line, latest_signal.entry_line.upper())
+        scenario = f"LONG AT {ls}"
+        scenario_color = GREEN
+        scenario_icon = "↑"
+    elif latest_signal and latest_signal.direction == "SHORT":
+        ls = _LINE_SHORT_MAP.get(latest_signal.entry_line, latest_signal.entry_line.upper())
+        scenario = f"SHORT AT {ls}"
+        scenario_color = RED
+        scenario_icon = "↓"
+    else:
+        scenario = "WAIT FOR SETUP"
+        scenario_color = TXT2
+        scenario_icon = "⏳"
+
+    grade_colors = {"A": GREEN, "B": BLUE, "C": GOLD, "D": RED, "F": RED}
+    grade_color = grade_colors.get(session_quality.grade, TXT)
+
+    rec_colors = {
+        "FULL SIZE": GREEN, "HALF SIZE": GOLD,
+        "PAPER ONLY": GOLD, "SIT OUT": RED,
+    }
+    rec_color = rec_colors.get(session_quality.recommendation, TXT)
+
+    piv_ok = pivots_confirmed >= 1
+    piv_icon = "✓" if piv_ok else "✗"
+    piv_color = GREEN if piv_ok else RED
+
+    html = (
+        f'<div class="pc" style="border-left:4px solid {scenario_color};height:100%;">'
+        f'<div style="font-size:0.6rem;font-family:Outfit,sans-serif;font-weight:600;'
+        f'color:#555577;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">SCENARIO</div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:1.3rem;font-weight:900;'
+        f'color:{scenario_color};line-height:1.1;margin-bottom:14px;">'
+        f'{scenario_icon} {scenario}</div>'
+        f'<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">'
+        f'<div style="background:{grade_color}22;border:1px solid {grade_color}66;border-radius:8px;'
+        f'padding:6px 14px;text-align:center;min-width:52px;">'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:1.7rem;font-weight:900;'
+        f'color:{grade_color};line-height:1;">{session_quality.grade}</div>'
+        f'<div style="font-size:0.58rem;color:#555577;text-transform:uppercase;margin-top:2px;">Grade</div>'
+        f'</div>'
+        f'<div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.85rem;font-weight:700;'
+        f'color:{rec_color};">{session_quality.recommendation}</div>'
+        f'<div style="font-size:0.68rem;color:#a0a0c0;margin-top:2px;">Score: {session_quality.score:.0f} / 100</div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="display:flex;flex-direction:column;gap:6px;">'
+        f'<span style="font-size:0.7rem;color:{vix_color};">VIX {vix:.1f} · {vix_regime}</span>'
+        f'<span style="font-size:0.7rem;color:{piv_color};">{piv_icon} Pivots {pivots_confirmed}/2</span>'
+        f'</div>'
+        f'</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_trade_card(signal, offset: float, label: str = "PRIMARY"):
+    """Trade setup card: direction, entry, stop, target, R:R."""
+    if signal is None or signal.direction == "NEUTRAL":
+        html = (
+            f'<div class="pc" style="opacity:0.45;height:100%;display:flex;'
+            f'flex-direction:column;align-items:center;justify-content:center;text-align:center;">'
+            f'<div style="font-size:0.6rem;font-family:Outfit,sans-serif;font-weight:600;'
+            f'color:#555577;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;">{label} TRADE</div>'
+            f'<div style="font-size:2.2rem;color:#1a1a35;margin-bottom:8px;">—</div>'
+            f'<div class="dim">No setup detected</div>'
+            f'</div>'
+        )
+        st.markdown(html, unsafe_allow_html=True)
+        return
+
+    is_long = signal.direction == "LONG"
+    dir_color = GREEN if is_long else RED
+    dir_icon = "↑" if is_long else "↓"
+    ls = _LINE_SHORT_MAP.get(signal.entry_line, signal.entry_line.upper() if signal.entry_line else "?")
+
+    target_str = f"{signal.target_price:,.2f}" if signal.target_price else "—"
+    stop_str = f"{signal.stop_price:,.2f}" if signal.stop_price else "—"
+    reward_str = f"+{signal.reward_pts:.1f}pt" if signal.reward_pts else ""
+    risk_str = f"-{signal.risk_pts:.1f}pt" if signal.risk_pts else ""
+
+    strength_colors = {"PREMIUM": GOLD, "HIGH": BLUE, "STANDARD": TXT2}
+    strength_color = strength_colors.get(signal.signal_strength, TXT2)
+    confluence_html = (
+        f'<span style="font-size:0.68rem;color:{GOLD};">🔥 CONFLUENCE</span>'
+        if signal.confluence_boost else ""
+    )
+
+    html = (
+        f'<div class="pc" style="border-left:4px solid {dir_color};height:100%;">'
+        f'<div style="font-size:0.6rem;font-family:Outfit,sans-serif;font-weight:600;'
+        f'color:#555577;text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;">{label} TRADE</div>'
+        f'<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px;">'
+        f'<span style="font-family:JetBrains Mono,monospace;font-size:2rem;font-weight:900;'
+        f'color:{dir_color};line-height:1;">{dir_icon} {signal.direction}</span>'
+        f'<span style="font-size:0.72rem;color:{dir_color}99;font-weight:600;">@ {ls}</span>'
+        f'</div>'
+        f'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">'
+        # Entry
+        f'<div style="background:#1a1a35;border-radius:6px;padding:8px;">'
+        f'<div style="font-size:0.58rem;color:#555577;text-transform:uppercase;margin-bottom:3px;">Entry</div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.95rem;font-weight:700;'
+        f'color:{TXT};">{signal.entry_price:,.2f}</div>'
+        f'</div>'
+        # Target
+        f'<div style="background:rgba(0,255,136,0.07);border-radius:6px;padding:8px;">'
+        f'<div style="font-size:0.58rem;color:#555577;text-transform:uppercase;margin-bottom:3px;">'
+        f'Target {reward_str}</div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.95rem;font-weight:700;'
+        f'color:{GREEN};">{target_str}</div>'
+        f'</div>'
+        # Stop
+        f'<div style="background:rgba(255,0,85,0.07);border-radius:6px;padding:8px;">'
+        f'<div style="font-size:0.58rem;color:#555577;text-transform:uppercase;margin-bottom:3px;">'
+        f'Stop {risk_str}</div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.95rem;font-weight:700;'
+        f'color:{RED};">{stop_str}</div>'
+        f'</div>'
+        # R:R
+        f'<div style="background:#1a1a35;border-radius:6px;padding:8px;">'
+        f'<div style="font-size:0.58rem;color:#555577;text-transform:uppercase;margin-bottom:3px;">R : R</div>'
+        f'<div style="font-family:JetBrains Mono,monospace;font-size:0.95rem;font-weight:700;'
+        f'color:{GOLD};">{signal.rr_ratio:.1f}x</div>'
+        f'</div>'
+        f'</div>'
+        f'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+        f'<span style="font-size:0.68rem;color:{strength_color};font-weight:600;">◆ {signal.signal_strength}</span>'
+        f'{confluence_html}'
+        f'</div>'
+        f'</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def render_ladder(lines: list, es_price: float, offset: float):
+    """Price ladder: all 6 lines sorted high→low with current price marker."""
+    if not lines:
+        return
+
+    sorted_lines = sorted(lines, key=lambda l: l.price, reverse=True)
+    rows = ""
+    price_inserted = False
+
+    for line in sorted_lines:
+        if not price_inserted and line.price < es_price:
+            rows += (
+                f'<tr>'
+                f'<td colspan="5" style="padding:4px 12px 8px;">'
+                f'<div style="border-top:2px solid {CYAN};padding-top:6px;'
+                f'display:flex;align-items:center;gap:12px;">'
+                f'<span style="font-family:JetBrains Mono,monospace;font-size:0.95rem;'
+                f'font-weight:900;color:{CYAN};">▶ {es_price:,.2f}</span>'
+                f'<span style="font-size:0.6rem;color:#555577;letter-spacing:1px;'
+                f'text-transform:uppercase;">Current Price</span>'
+                f'</div>'
+                f'</td>'
+                f'</tr>'
+            )
+            price_inserted = True
+
+        color = LINE_COLORS.get(line.name, BLUE)
+        dist = line.price - es_price
+        sign = "+" if dist >= 0 else ""
+        dist_color = RED if dist < -0.5 else (GREEN if dist > 0.5 else CYAN)
+        short = _LINE_SHORT_MAP.get(line.name, line.label)
+        spx = line.price - offset
+        dir_arrow = "↑" if line.direction == "ascending" else "↓"
+        near = abs(dist) <= 5.0
+        row_bg = f'background:rgba(0,212,255,0.06);' if near else ''
+
+        rows += (
+            f'<tr style="{row_bg}border-bottom:1px solid #1a1a3522;">'
+            f'<td style="padding:9px 10px;width:14px;">'
+            f'<div style="width:9px;height:9px;border-radius:50%;background:{color};'
+            f'box-shadow:0 0 7px {color}66;"></div>'
+            f'</td>'
+            f'<td style="padding:9px 8px;font-family:JetBrains Mono,monospace;'
+            f'font-size:0.88rem;font-weight:800;color:{color};">{short}</td>'
+            f'<td style="padding:9px 8px;font-family:JetBrains Mono,monospace;'
+            f'font-size:0.92rem;font-weight:{"900" if near else "600"};'
+            f'color:{"#00d4ff" if near else "#e8e8f0"};">{line.price:,.2f}</td>'
+            f'<td style="padding:9px 8px;font-family:Outfit,sans-serif;'
+            f'font-size:0.72rem;color:#555577;">{spx:,.1f}</td>'
+            f'<td style="padding:9px 12px;font-family:JetBrains Mono,monospace;'
+            f'font-size:0.82rem;font-weight:700;color:{dist_color};text-align:right;">'
+            f'{sign}{dist:.1f} {dir_arrow}</td>'
+            f'</tr>'
+        )
+
+    if not price_inserted:
+        rows += (
+            f'<tr>'
+            f'<td colspan="5" style="padding:8px 12px;">'
+            f'<div style="border-top:2px solid {CYAN};padding-top:6px;'
+            f'display:flex;align-items:center;gap:12px;">'
+            f'<span style="font-family:JetBrains Mono,monospace;font-size:0.95rem;'
+            f'font-weight:900;color:{CYAN};">▶ {es_price:,.2f}</span>'
+            f'<span style="font-size:0.6rem;color:#555577;text-transform:uppercase;">'
+            f'Current Price</span>'
+            f'</div>'
+            f'</td>'
+            f'</tr>'
+        )
+
+    html = (
+        f'<div class="pc" style="border-left:4px solid {GOLD};padding:1rem;">'
+        f'<div style="font-size:0.6rem;font-family:Outfit,sans-serif;font-weight:600;'
+        f'color:#555577;text-transform:uppercase;letter-spacing:2px;margin-bottom:0.8rem;">'
+        f'⚡ Price Ladder</div>'
+        f'<table style="width:100%;border-collapse:collapse;">'
+        f'<thead><tr style="border-bottom:2px solid #1a1a35;">'
+        f'<th></th>'
+        f'<th style="padding:3px 8px;font-size:0.58rem;color:#555577;text-align:left;'
+        f'text-transform:uppercase;font-family:Outfit,sans-serif;font-weight:600;">Line</th>'
+        f'<th style="padding:3px 8px;font-size:0.58rem;color:#555577;text-align:left;'
+        f'text-transform:uppercase;font-family:Outfit,sans-serif;font-weight:600;">ES</th>'
+        f'<th style="padding:3px 8px;font-size:0.58rem;color:#555577;text-align:left;'
+        f'text-transform:uppercase;font-family:Outfit,sans-serif;font-weight:600;">SPX</th>'
+        f'<th style="padding:3px 12px;font-size:0.58rem;color:#555577;text-align:right;'
+        f'text-transform:uppercase;font-family:Outfit,sans-serif;font-weight:600;">Dist</th>'
+        f'</tr></thead>'
+        f'<tbody>{rows}</tbody>'
+        f'</table>'
+        f'</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)

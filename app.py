@@ -52,6 +52,7 @@ from ui_components import (
     render_9am_levels, render_live_levels,
     render_daily_pnl_card, render_nearest_levels,
     render_event_countdown, render_trade_readiness,
+    render_scenario_card, render_trade_card, render_ladder,
 )
 from macro_calendar import (
     get_events_for_date, get_upcoming_events,
@@ -362,102 +363,112 @@ tab_dashboard, tab_chart, tab_options, tab_macro, tab_backtest, tab_montecarlo, 
 #  TAB 1: DASHBOARD
 # ════════════════════════════════════════════════════════════════
 with tab_dashboard:
-    # ── Macro Warning Banner ──
-    if today_events:
-        worst_color = MACRO_SEVERITY_COLORS.get(today_severity, "#888")
-        event_names = ", ".join(e.title for e in today_events)
-        blackout_msg = " · ⛔ BLACKOUT ACTIVE" if macro_blackout else ""
-        st.markdown(f'<div class="macro-warn" style="border-color:{worst_color};">'
-            f'<span class="lbl" style="color:{worst_color}"><span class="icon">&#9888;</span>MACRO EVENT TODAY</span><br>'
-            f'<span class="sm" style="color:{worst_color}">{event_names}</span><br>'
-            f'<span class="dim">Recommendation: {today_macro_rec}{blackout_msg}</span>'
-            f'</div>', unsafe_allow_html=True)
-
-    # ── Daily P&L + Event Countdown + Trade Readiness row ──
+    # ── Load journal data (needed by P&L expander) ──
     journal_df = load_journal()
     today_str = trade_date.strftime("%Y-%m-%d")
     today_journal = journal_df[journal_df["date"] == today_str] if not journal_df.empty else pd.DataFrame()
-    today_realized_pnl = float(pd.to_numeric(today_journal["result_dollars"], errors="coerce").fillna(0).sum()) if not today_journal.empty else 0.0
+    today_realized_pnl = float(
+        pd.to_numeric(today_journal["result_dollars"], errors="coerce").fillna(0).sum()
+    ) if not today_journal.empty else 0.0
 
-    pnl_col, countdown_col, readiness_col = st.columns(3)
-
-    with pnl_col:
-        render_daily_pnl_card(journal_df, trade_date, DAILY_LOSS_LIMIT)
-
-    with countdown_col:
-        # Show countdown for today + upcoming week events
-        week_events = get_upcoming_events(trade_date, days_ahead=7)
-        render_event_countdown(week_events, ref_datetime)
-
-    with readiness_col:
-        render_trade_readiness(
-            vix=vix,
-            pivots_confirmed=pivots_confirmed,
-            session_quality_grade=session_quality.grade,
-            daily_pnl=today_realized_pnl,
-            daily_loss_limit=DAILY_LOSS_LIMIT,
-            macro_blackout=macro_blackout,
-        )
-
-    # ── Signal + Session Quality row ──
-    sig_col, qual_col = st.columns([3, 2])
-
-    with sig_col:
+    # ── Critical blackout banner (only when active) ──
+    if macro_blackout:
+        worst_color = MACRO_SEVERITY_COLORS.get(today_severity, "#888")
+        event_names = ", ".join(e.title for e in today_events)
         st.markdown(
-            '<div class="pc">'
-            '<span class="lbl"><span style="font-size:2rem;">&#9889;</span> ACTIVE SIGNAL</span>'
-            '</div>',
-            unsafe_allow_html=True,
-        )
-        render_signal_panel(latest_signal)
-
-    with qual_col:
-        render_session_quality(session_quality)
-
-    # ── Nearest Key Levels ──
-    render_nearest_levels(lines, es_price)
-
-    # Lines
-    render_lines_panel(lines, es_price, offset)
-
-    # Pivots + Confluence row
-    piv_col, conf_col = st.columns([3, 2])
-
-    with piv_col:
-        render_pivot_panel(upper_pivot, lower_pivot)
-
-    with conf_col:
-        render_confluence_zones(confluence_zones, offset)
-
-    # Signal History (today)
-    if signals:
-        st.markdown(
-            '<div class="pc">'
-            '<span class="lbl"><span style="font-size:2rem;">&#128200;</span> TODAY\'S SIGNALS</span>'
-            '</div>',
+            f'<div class="macro-warn" style="border-color:{worst_color};">'
+            f'<span class="lbl" style="color:{worst_color}">⛔ MACRO BLACKOUT ACTIVE</span><br>'
+            f'<span class="sm" style="color:{worst_color}">{event_names}</span>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
-        for sig_time, sig in signals:
-            color = COLORS["bullish"] if sig.direction == "LONG" else COLORS["bearish"]
+    # ── Find alternate signal (opposite direction from primary) ──
+    alt_signal = None
+    if latest_signal and latest_signal.direction != "NEUTRAL":
+        opposite_dir = "SHORT" if latest_signal.direction == "LONG" else "LONG"
+        for _, sig in reversed(signals):
+            if sig.direction == opposite_dir:
+                alt_signal = sig
+                break
+
+    # ── Core 3-panel row: Scenario · Primary Trade · Alternate Trade ──
+    sc_col, primary_col, alt_col = st.columns([1, 1.2, 1.2])
+
+    with sc_col:
+        render_scenario_card(
+            session_quality, latest_signal, vix,
+            pivots_confirmed, macro_blackout, today_severity,
+        )
+
+    with primary_col:
+        render_trade_card(latest_signal, offset, "PRIMARY")
+
+    with alt_col:
+        render_trade_card(alt_signal, offset, "ALTERNATE")
+
+    # ── Price Ladder (full width) ──
+    render_ladder(lines, es_price, offset)
+
+    # ── Expanders: everything else ──
+    with st.expander("📊 Daily P&L · Budget · Readiness"):
+        pnl_col, countdown_col, readiness_col = st.columns(3)
+        with pnl_col:
+            render_daily_pnl_card(journal_df, trade_date, DAILY_LOSS_LIMIT)
+        with countdown_col:
+            week_events = get_upcoming_events(trade_date, days_ahead=7)
+            render_event_countdown(week_events, ref_datetime)
+        with readiness_col:
+            render_trade_readiness(
+                vix=vix,
+                pivots_confirmed=pivots_confirmed,
+                session_quality_grade=session_quality.grade,
+                daily_pnl=today_realized_pnl,
+                daily_loss_limit=DAILY_LOSS_LIMIT,
+                macro_blackout=macro_blackout,
+            )
+
+    with st.expander("📐 Lines · Pivots · Confluence"):
+        render_lines_panel(lines, es_price, offset)
+        piv_col2, conf_col2 = st.columns([3, 2])
+        with piv_col2:
+            render_pivot_panel(upper_pivot, lower_pivot)
+        with conf_col2:
+            render_confluence_zones(confluence_zones, offset)
+
+    if today_events:
+        sev_label = today_severity.upper() if today_severity else "EVENT"
+        with st.expander(f"⚠️ Macro Events Today · {sev_label}"):
+            worst_color = MACRO_SEVERITY_COLORS.get(today_severity, "#888")
+            event_names = ", ".join(e.title for e in today_events)
             st.markdown(
-                f'<div style="display:flex; align-items:center; gap:1rem; padding:0.5rem 0; border-bottom:1px solid #1a1a35;">'
-                f'<span class="sm" style="color:{COLORS["text_muted"]}; min-width:80px;">'
-                f'{sig_time.strftime("%I:%M %p")}'
-                f'</span>'
-                f'<span class="sm" style="color:{color}; font-weight:600; min-width:60px;">'
-                f'{sig.direction}'
-                f'</span>'
-                f'<span class="dim">'
-                f'at {sig.entry_line} · {sig.entry_price:,.2f}'
-                f'</span>'
-                f'<span class="sm" style="color:{COLORS["accent_gold"]};">'
-                f'R:R {sig.rr_ratio:.1f}'
-                f'</span>'
-                f'<span class="strength-{sig.signal_strength.lower()}">'
-                f'{sig.signal_strength}'
-                f'</span>'
-                f'</div>', unsafe_allow_html=True)
+                f'<div style="padding:0.8rem 1rem;border-left:4px solid {worst_color};'
+                f'background:rgba(255,255,255,0.02);border-radius:0 8px 8px 0;">'
+                f'<div class="sm" style="color:{worst_color};font-weight:600;">{event_names}</div>'
+                f'<div class="dim" style="margin-top:6px;">{today_macro_rec}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
+    if signals:
+        with st.expander(f"📈 Signal History · {len(signals)} today"):
+            for sig_time, sig in signals:
+                color = COLORS["bullish"] if sig.direction == "LONG" else COLORS["bearish"]
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:1rem;padding:0.5rem 0;'
+                    f'border-bottom:1px solid #1a1a35;">'
+                    f'<span class="sm" style="color:{COLORS["text_muted"]};min-width:80px;">'
+                    f'{sig_time.strftime("%I:%M %p")}</span>'
+                    f'<span class="sm" style="color:{color};font-weight:600;min-width:60px;">'
+                    f'{sig.direction}</span>'
+                    f'<span class="dim">at {sig.entry_line} · {sig.entry_price:,.2f}</span>'
+                    f'<span class="sm" style="color:{COLORS["accent_gold"]};">'
+                    f'R:R {sig.rr_ratio:.1f}</span>'
+                    f'<span class="strength-{sig.signal_strength.lower()}">'
+                    f'{sig.signal_strength}</span>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
 
 # ════════════════════════════════════════════════════════════════
